@@ -19,7 +19,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PROJECT = "defold/big-synthetic-project"
 BENCHMARK_PLATFORM = "macos-arm64"
-OPEN_TIMEOUT_SECONDS = 300
+OPEN_TIMEOUT_SECONDS = 1800
 BUILD_TIMEOUT_SECONDS = 1800
 POLL_INTERVAL_SECONDS = 1.0
 BUILD_HEARTBEAT_SECONDS = 15
