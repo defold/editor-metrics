@@ -1,4 +1,5 @@
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 import unittest
@@ -38,6 +39,12 @@ class NightlyTests(unittest.TestCase):
             content = path.read_text()
             self.assertIn("Last updated: `2026-03-23T03:00:00Z`", content)
             self.assertNotIn("Last updated: `old`", content)
+
+    def test_run_logged_captures_and_returns_stdout(self) -> None:
+        result = nightly.run_logged(sys.executable, "-c", "print('hello from child')")
+
+        self.assertEqual(0, result.returncode)
+        self.assertIn("hello from child", result.stdout)
 
     @mock.patch("scripts.nightly.run")
     def test_benchmark_outputs_changed_checks_metrics_and_charts_diff(self, run_mock: mock.Mock) -> None:

@@ -9,6 +9,7 @@ import socket
 import stat
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -21,6 +22,7 @@ BENCHMARK_PLATFORM = "macos-arm64"
 OPEN_TIMEOUT_SECONDS = 300
 BUILD_TIMEOUT_SECONDS = 1800
 POLL_INTERVAL_SECONDS = 1.0
+BUILD_HEARTBEAT_SECONDS = 15
 OPEN_LOG_MARKERS = {
     "project_loaded": "project loaded",
     "stage_loaded": "stage-loaded",
@@ -472,14 +474,47 @@ def wait_for_open(process: subprocess.Popen[str], project_dir: Path, log_paths: 
 
 def trigger_build(port: int, timeout_seconds: int) -> dict[str, object]:
     start = time.monotonic()
+    result: dict[str, object] = {}
+    error: BaseException | None = None
+
+    def worker() -> None:
+        nonlocal result, error
+        try:
+            status, payload, body = http_json(
+                f"http://127.0.0.1:{port}/command/build",
+                method="POST",
+                timeout=timeout_seconds,
+            )
+            result = {
+                "status": status,
+                "payload": payload,
+                "body": body,
+            }
+        except BaseException as exc:
+            error = exc
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    last_report_second = -1
+    while thread.is_alive():
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        current_second = elapsed_ms // 1000
+        if current_second != last_report_second and current_second > 0 and current_second % BUILD_HEARTBEAT_SECONDS == 0:
+            log(f"waiting for build: elapsed_ms={elapsed_ms} port={port}")
+            last_report_second = current_second
+        thread.join(timeout=1.0)
+
+    if error is not None:
+        if isinstance(error, TimeoutError):
+            raise BenchmarkTimeout("build", timeout_seconds * 1000, f"timed out waiting for build after {timeout_seconds * 1000} ms") from error
+        raise error
+
     try:
-        status, payload, body = http_json(
-            f"http://127.0.0.1:{port}/command/build",
-            method="POST",
-            timeout=timeout_seconds,
-        )
-    except TimeoutError as exc:
-        raise BenchmarkTimeout("build", timeout_seconds * 1000, f"timed out waiting for build after {timeout_seconds * 1000} ms") from exc
+        status = result["status"]
+        payload = result["payload"]
+        body = result["body"]
+    except KeyError as exc:
+        raise RuntimeError("build request did not produce a response") from exc
     duration_ms = int((time.monotonic() - start) * 1000)
     if status != 200:
         raise RuntimeError(f"build failed with HTTP {status}: {body.strip() or 'empty response'}")

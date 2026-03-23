@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from scripts import run_benchmark
 
@@ -42,6 +43,26 @@ class RunBenchmarkTests(unittest.TestCase):
         self.assertEqual(510000, sample["open_time_ms"])
         self.assertEqual(600000, sample["build_time_ms"])
         self.assertEqual("failed", sample["status"])
+
+    @mock.patch("scripts.run_benchmark.BUILD_HEARTBEAT_SECONDS", 1)
+    def test_trigger_build_logs_heartbeat_while_waiting(self) -> None:
+        started = mock.Mock()
+
+        def slow_http_json(url: str, *, method: str = "GET", timeout: float = 10.0) -> tuple[int, object | None, str]:
+            started()
+            import time
+
+            time.sleep(1.2)
+            return 200, {"success": True}, ""
+
+        with mock.patch("scripts.run_benchmark.http_json", side_effect=slow_http_json), mock.patch(
+            "scripts.run_benchmark.log"
+        ) as log_mock:
+            result = run_benchmark.trigger_build(8080, 10)
+
+        self.assertEqual({"success": True}, result["build_response"])
+        self.assertTrue(started.called)
+        self.assertTrue(any("waiting for build:" in call.args[0] for call in log_mock.call_args_list))
 
 
 if __name__ == "__main__":

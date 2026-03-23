@@ -33,6 +33,36 @@ def run(*args: str, env: dict[str, str] | None = None, check: bool = True) -> su
     return result
 
 
+def log(message: str) -> None:
+    print(f"[nightly] {message}", flush=True)
+
+
+def run_logged(*args: str, env: dict[str, str] | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
+    log(f"running: {' '.join(args)}")
+    process = subprocess.Popen(
+        list(args),
+        cwd=ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+    )
+    output_lines: list[str] = []
+    assert process.stdout is not None
+    for line in process.stdout:
+        output_lines.append(line)
+        print(line, end="", flush=True)
+    process.stdout.close()
+    returncode = process.wait()
+    result = subprocess.CompletedProcess(list(args), returncode, "".join(output_lines), "")
+    if check and returncode != 0:
+        message = result.stdout.strip() or f"exit {returncode}"
+        raise RuntimeError(f"{' '.join(args)}: {message}")
+    log(f"finished: {' '.join(args)} (exit {returncode})")
+    return result
+
+
 def bool_arg(value: str) -> bool:
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
@@ -135,7 +165,8 @@ def main() -> int:
     ]
     if args.editor_sha:
         run_benchmark_command.extend(["--editor-sha", args.editor_sha])
-    benchmark_result = run(*run_benchmark_command, check=False)
+    log("starting nightly benchmark run")
+    benchmark_result = run_logged(*run_benchmark_command, check=False)
 
     sample_path = artifacts_dir / "sample.json"
     build_metadata_path = artifacts_dir / "defold-build.json"
@@ -143,7 +174,8 @@ def main() -> int:
         command = " ".join(run_benchmark_command)
         raise RuntimeError(f"{command}: benchmark failed before producing sample artifacts")
 
-    run(
+    log("persisting benchmark sample into metrics history")
+    run_logged(
         sys.executable,
         str(ROOT / "scripts" / "persist_metrics.py"),
         "--sample",
@@ -153,7 +185,8 @@ def main() -> int:
         "--csv",
         str(metrics_csv),
     )
-    run(
+    log("regenerating charts from metrics history")
+    run_logged(
         sys.executable,
         str(ROOT / "scripts" / "generate_charts.py"),
         "--metrics-csv",
@@ -167,8 +200,16 @@ def main() -> int:
         update_readme_last_updated(str(run_metadata["timestamp_utc"]))
 
     sample = load_json(sample_path)
+    log(
+        "sample result: "
+        f"status={sample.get('status')} "
+        f"commit_sha={sample.get('commit_sha')} "
+        f"open_time_ms={sample.get('open_time_ms')} "
+        f"build_time_ms={sample.get('build_time_ms')}"
+    )
     if args.commit:
         target_branch = args.target_branch or os.environ.get("GITHUB_EVENT_REPOSITORY_DEFAULT_BRANCH") or "master"
+        log(f"committing updated outputs to {target_branch}")
         commit_results(target_branch, sample)
     return benchmark_result.returncode
 
