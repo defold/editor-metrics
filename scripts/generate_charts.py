@@ -41,6 +41,16 @@ def metric_value(row: dict[str, str], field: str) -> float | None:
     return float(value)
 
 
+def point_is_failure(row: dict[str, str], field: str) -> bool:
+    if row.get("status", "ok") == "ok":
+        return False
+    if field == "build_time_ms":
+        return metric_value(row, field) is not None
+    if field == "open_time_ms":
+        return metric_value(row, field) is not None and metric_value(row, "build_time_ms") is None
+    return False
+
+
 def format_metric(value: float, unit: str) -> str:
     if unit == "Bytes":
         suffixes = ["B", "KiB", "MiB", "GiB"]
@@ -60,26 +70,20 @@ def series_key(row: dict[str, str]) -> str:
     return "series"
 
 
-def failure_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    return [row for row in rows if row.get("status", "ok") != "ok" and row.get("commit_time", "").strip()]
-
-
 def render_chart(rows: list[dict[str, str]], field: str, title: str, unit: str) -> str:
     plot_width = WIDTH - PLOT_LEFT - PLOT_RIGHT
     plot_height = HEIGHT - PLOT_TOP - PLOT_BOTTOM
-    points_by_series: dict[str, list[tuple[dt.datetime, float]]] = {}
-    failures = failure_rows(rows)
+    points_by_series: dict[str, list[tuple[dt.datetime, float, dict[str, str]]]] = {}
     for row in rows:
         value = metric_value(row, field)
         if value is None:
             continue
-        points_by_series.setdefault(series_key(row), []).append((parse_time(row["commit_time"]), value))
+        points_by_series.setdefault(series_key(row), []).append((parse_time(row["commit_time"]), value, row))
     for points in points_by_series.values():
         points.sort(key=lambda item: item[0])
 
     all_points = [point for points in points_by_series.values() for point in points]
-    failure_times = [parse_time(row["commit_time"]) for row in failures]
-    all_times = [point[0] for point in all_points] + failure_times
+    all_times = [point[0] for point in all_points]
     if not all_times:
         return (
             f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {WIDTH} {HEIGHT}'>"
@@ -147,31 +151,27 @@ def render_chart(rows: list[dict[str, str]], field: str, title: str, unit: str) 
     legend_y = HEIGHT - 18
     for index, (name, points) in enumerate(sorted(points_by_series.items())):
         color = PALETTE[index % len(PALETTE)]
-        coords = [f"{x_pos(timestamp):.2f},{y_pos(value):.2f}" for timestamp, value in points]
+        coords = [f"{x_pos(timestamp):.2f},{y_pos(value):.2f}" for timestamp, value, _row in points]
         if len(coords) >= 2:
             parts.append(f"<polyline fill='none' stroke='{color}' stroke-width='3' points='{' '.join(coords)}'/>")
-        for timestamp, value in points:
+        for timestamp, value, row in points:
             x = x_pos(timestamp)
             y = y_pos(value)
             label_text = f"{timestamp.strftime('%Y-%m-%d')} {format_metric(value, unit)}"
+            is_failure = point_is_failure(row, field)
+            point_color = FAILURE_COLOR if is_failure else color
             if show_legend:
                 label_text = f"{name} {label_text}"
+            if is_failure and row.get("error", "").strip():
+                label_text = f"{label_text} failed: {row['error']}"
             label = html.escape(label_text)
-            parts.append(f"<circle cx='{x:.2f}' cy='{y:.2f}' r='4' fill='{color}'><title>{label}</title></circle>")
+            parts.append(f"<circle cx='{x:.2f}' cy='{y:.2f}' r='4' fill='{point_color}'><title>{label}</title></circle>")
         if show_legend:
             legend_x = 32 + index * 220
             parts.append(f"<rect x='{legend_x}' y='{legend_y - 10}' width='14' height='14' rx='3' fill='{color}'/>")
             parts.append(
                 f"<text x='{legend_x + 22}' y='{legend_y + 2}' font-size='12' font-family='Helvetica, Arial, sans-serif' fill='#334155'>{html.escape(name)}</text>"
             )
-
-    failure_y = PLOT_TOP + 14
-    for row in failures:
-        timestamp = parse_time(row["commit_time"])
-        x = x_pos(timestamp)
-        label = html.escape(f"{timestamp.strftime('%Y-%m-%d')} failed: {row.get('error', 'benchmark failed')}")
-        parts.append(f"<line x1='{x:.2f}' y1='{PLOT_TOP}' x2='{x:.2f}' y2='{PLOT_TOP + plot_height}' stroke='{FAILURE_COLOR}' stroke-width='1' stroke-dasharray='4 4' opacity='0.6'/>")
-        parts.append(f"<circle cx='{x:.2f}' cy='{failure_y:.2f}' r='6' fill='{FAILURE_COLOR}'><title>{label}</title></circle>")
 
     parts.append("</svg>")
     return "".join(parts)

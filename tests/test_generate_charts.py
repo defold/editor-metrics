@@ -11,7 +11,7 @@ class GenerateChartsTests(unittest.TestCase):
                     "commit_time": "2026-03-23T12:00:00Z",
                     "status": "failed",
                     "error": "timed out waiting for build",
-                    "open_time_ms": "",
+                    "open_time_ms": "1234",
                 }
             ],
             "open_time_ms",
@@ -21,6 +21,26 @@ class GenerateChartsTests(unittest.TestCase):
 
         self.assertIn(generate_charts.FAILURE_COLOR, svg)
         self.assertIn("timed out waiting for build", svg)
+        self.assertEqual(1, svg.count("<circle "))
+
+    def test_render_chart_does_not_mark_unrelated_metric_as_failure(self) -> None:
+        svg = generate_charts.render_chart(
+            [
+                {
+                    "commit_time": "2026-03-23T12:00:00Z",
+                    "status": "failed",
+                    "error": "timed out waiting for build",
+                    "install_size_bytes": "1234",
+                    "build_time_ms": "600000",
+                }
+            ],
+            "install_size_bytes",
+            "Install Size",
+            "Bytes",
+        )
+
+        self.assertNotIn(generate_charts.FAILURE_COLOR, svg)
+        self.assertNotIn("failed:", svg)
 
 
 if __name__ == "__main__":
