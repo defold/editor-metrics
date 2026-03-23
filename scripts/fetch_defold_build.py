@@ -9,7 +9,7 @@ import subprocess
 import urllib.request
 
 
-RELEASES_URL = "https://api.github.com/repos/defold/defold/releases?per_page=20"
+RELEASES_URL = "https://api.github.com/repos/defold/defold/releases?per_page=100"
 COMMIT_URL = "https://api.github.com/repos/defold/defold/commits/{sha}"
 ASSET_NAMES = {
     "macos-arm64": "Defold-arm64-macos.dmg",
@@ -49,6 +49,29 @@ def choose_release(releases: list[dict[str, object]]) -> dict[str, object]:
             continue
         return release
     raise RuntimeError("could not find alpha release tracking dev")
+
+
+def sha_matches(actual: str | None, requested: str | None) -> bool:
+    if not actual or not requested:
+        return False
+    normalized = requested.strip().lower()
+    if not normalized:
+        return False
+    return actual.lower().startswith(normalized)
+
+
+def choose_release_for_editor_sha(releases: list[dict[str, object]], requested_sha: str) -> dict[str, object]:
+    for release in releases:
+        if release.get("target_commitish") != "dev":
+            continue
+        if not release.get("prerelease"):
+            continue
+        tag = str(release.get("tag_name", ""))
+        if "alpha" not in tag:
+            continue
+        if sha_matches(editor_sha(str(release.get("body", ""))), requested_sha):
+            return release
+    raise RuntimeError(f"could not find alpha release for editor sha {requested_sha}")
 
 
 def editor_sha(body: str) -> str | None:
@@ -109,6 +132,7 @@ def main() -> int:
     parser.add_argument("--work-dir", required=True)
     parser.add_argument("--metadata-out", required=True)
     parser.add_argument("--platform", default="macos-arm64")
+    parser.add_argument("--editor-sha")
     args = parser.parse_args()
 
     work_dir = Path(args.work_dir)
@@ -120,7 +144,7 @@ def main() -> int:
     releases = fetch_json(RELEASES_URL)
     if not isinstance(releases, list):
         raise RuntimeError("unexpected GitHub releases response")
-    release = choose_release(releases)
+    release = choose_release(releases) if not args.editor_sha else choose_release_for_editor_sha(releases, args.editor_sha)
     asset_name = ASSET_NAMES.get(args.platform)
     if asset_name is None:
         raise RuntimeError(f"unsupported platform {args.platform}")
@@ -147,6 +171,7 @@ def main() -> int:
         "release_published_at": release.get("published_at"),
         "platform": args.platform,
         "target_commitish": release.get("target_commitish"),
+        "requested_editor_sha": args.editor_sha,
         "editor_commit_sha": commit_sha,
         "editor_commit_time": None if commit is None else commit.get("commit", {}).get("committer", {}).get("date"),
         "asset_name": asset.get("name"),

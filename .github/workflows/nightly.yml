@@ -1,0 +1,76 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      editor_sha:
+        description: Optional Defold editor commit SHA or prefix
+        required: false
+        type: string
+      commit_to_default_branch:
+        description: Commit updated metrics back to the default branch
+        required: false
+        default: false
+        type: boolean
+      target_branch:
+        description: Override push branch when committing
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly-metrics
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Show runner details
+        run: uname -a
+
+      - name: Run nightly pipeline
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONUNBUFFERED: '1'
+          COMMIT_ENABLED: ${{ github.event_name == 'schedule' || inputs.commit_to_default_branch }}
+          TARGET_BRANCH: ${{ inputs.target_branch || github.event.repository.default_branch }}
+          EDITOR_SHA: ${{ inputs.editor_sha }}
+        run: |
+          mkdir -p artifacts work data charts
+          python scripts/nightly.py \
+            --work-dir work \
+            --artifacts-dir artifacts \
+            --metrics-csv data/metrics.csv \
+            --charts-dir charts \
+            --project defold/sample-pixel-line-platformer \
+            --commit "$COMMIT_ENABLED" \
+            --target-branch "$TARGET_BRANCH" \
+            ${EDITOR_SHA:+--editor-sha "$EDITOR_SHA"}
+
+      - name: Upload nightly artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-artifacts
+          path: |
+            artifacts
+            data/metrics.csv
+            charts
+            README.md
+          if-no-files-found: warn

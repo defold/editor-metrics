@@ -452,6 +452,7 @@ def main() -> int:
     parser.add_argument("--artifacts-dir", required=True)
     parser.add_argument("--metadata-out", required=True)
     parser.add_argument("--project", default=DEFAULT_PROJECT)
+    parser.add_argument("--editor-sha")
     args = parser.parse_args()
 
     work_dir = Path(args.work_dir)
@@ -463,9 +464,10 @@ def main() -> int:
 
     ensure_supported_host()
     metadata: dict[str, object] = {
-        "phase": "phase-3",
+        "phase": "phase-4",
         "platform": BENCHMARK_PLATFORM,
         "project": args.project,
+        "requested_editor_sha": args.editor_sha,
         "open_timeout_seconds": OPEN_TIMEOUT_SECONDS,
         "build_timeout_seconds": BUILD_TIMEOUT_SECONDS,
         "status": "failed",
@@ -491,6 +493,7 @@ def main() -> int:
                 "--platform",
                 BENCHMARK_PLATFORM,
             ]
+            + (["--editor-sha", args.editor_sha] if args.editor_sha else [])
         )
         write_text(logs_dir / "fetch.stdout.log", fetch_result.stdout)
         write_text(logs_dir / "fetch.stderr.log", fetch_result.stderr)

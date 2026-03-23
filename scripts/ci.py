@@ -68,9 +68,20 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--workflow", default=WORKFLOW_NAME)
     parser.add_argument("--event", default="push", choices=["push", "workflow_dispatch"])
+    parser.add_argument("--input", action="append", default=[])
     parser.add_argument("--keep-branch", action="store_true")
     parser.add_argument("--artifact-dir", default=str(DIST))
     return parser.parse_args()
+
+
+def parse_workflow_inputs(values: list[str]) -> list[tuple[str, str]]:
+    parsed: list[tuple[str, str]] = []
+    for value in values:
+        name, separator, raw = value.partition("=")
+        if not separator or not name:
+            raise RuntimeError(f"workflow input must be NAME=VALUE, got {value!r}")
+        parsed.append((name, raw))
+    return parsed
 
 
 def main() -> int:
@@ -89,6 +100,9 @@ def main() -> int:
         run("git", "rev-parse", "--show-toplevel")
         run("git", "remote", "get-url", "origin")
         run("gh", "auth", "status")
+        workflow_inputs = parse_workflow_inputs(args.input)
+        if workflow_inputs and args.event != "workflow_dispatch":
+            raise RuntimeError("--input requires --event workflow_dispatch")
         repo = run("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").stdout.strip()
         head = run("git", "rev-parse", "HEAD").stdout.strip()
         commit, tempdir = make_snapshot_commit(head)
@@ -114,7 +128,10 @@ def main() -> int:
         pushed_after = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         if args.event == "workflow_dispatch":
             print("dispatching workflow...", flush=True)
-            run("gh", "workflow", "run", args.workflow, "--ref", branch)
+            command = ["gh", "workflow", "run", args.workflow, "--ref", branch]
+            for name, value in workflow_inputs:
+                command.extend(["--raw-field", f"{name}={value}"])
+            run(*command)
 
         print("waiting for workflow run...", flush=True)
         run_id: int | None = None
