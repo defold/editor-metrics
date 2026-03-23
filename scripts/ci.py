@@ -84,6 +84,11 @@ def parse_workflow_inputs(values: list[str]) -> list[tuple[str, str]]:
     return parsed
 
 
+def snapshot_branch_name(commit: str, event: str) -> str:
+    prefix = "ci" if event == "push" else "dispatch"
+    return f"{prefix}/{commit}"
+
+
 def main() -> int:
     args = parse_args()
     tempdir: tempfile.TemporaryDirectory[str] | None = None
@@ -106,7 +111,7 @@ def main() -> int:
         repo = run("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").stdout.strip()
         head = run("git", "rev-parse", "HEAD").stdout.strip()
         commit, tempdir = make_snapshot_commit(head)
-        branch = f"ci/{commit}"
+        branch = snapshot_branch_name(commit, args.event)
 
         if run(
             "git",
