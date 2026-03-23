@@ -1,0 +1,42 @@
+name: Benchmark
+
+on:
+  push:
+    branches:
+      - ci/**
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth libgtk-3-0 libnss3 libxss1 libasound2t64 libgbm1 libxshmfence1
+
+      - name: Run benchmark bootstrap
+        env:
+          PYTHONUNBUFFERED: '1'
+        run: |
+          mkdir -p artifacts work
+          python scripts/run_benchmark.py \
+            --work-dir work \
+            --artifacts-dir artifacts \
+            --metadata-out artifacts/run-metadata.json \
+            --project defold/sample-pixel-line-platformer
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-artifacts
+          path: artifacts
+          if-no-files-found: warn
