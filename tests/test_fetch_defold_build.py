@@ -8,11 +8,17 @@ def make_release(tag_name: str, editor_commit_sha: str, *, prerelease: bool = Tr
         "tag_name": tag_name,
         "target_commitish": target_commitish,
         "prerelease": prerelease,
-        "body": f"Editor channel=alpha sha1: {editor_commit_sha}",
+        "body": f"Channel=alpha sha1: {editor_commit_sha}",
     }
 
 
 class FetchDefoldBuildTests(unittest.TestCase):
+    def test_editor_sha_accepts_legacy_editor_channel_format(self) -> None:
+        self.assertEqual(
+            "a" * 40,
+            fetch_defold_build.editor_sha(f"Editor channel=alpha sha1: {'a' * 40}"),
+        )
+
     def test_sha_matches_prefix(self) -> None:
         self.assertTrue(fetch_defold_build.sha_matches("abcdef123456", "abcdef"))
 

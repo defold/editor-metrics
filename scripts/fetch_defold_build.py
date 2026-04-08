@@ -75,8 +75,14 @@ def choose_release_for_editor_sha(releases: list[dict[str, object]], requested_s
 
 
 def editor_sha(body: str) -> str | None:
-    match = re.search(r"Editor channel=.*? sha1: ([0-9a-f]{40})", body)
-    return match.group(1) if match else None
+    for pattern in (
+        r"^Channel=.*? sha1: ([0-9a-f]{40})$",
+        r"^Editor channel=.*? sha1: ([0-9a-f]{40})$",
+    ):
+        match = re.search(pattern, body, re.MULTILINE)
+        if match:
+            return match.group(1)
+    return None
 
 
 def fetch_commit(commit_sha: str) -> dict[str, object]:
