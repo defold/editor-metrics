@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   nightly:
-    runs-on: macos-15
+    runs-on: self-hosted, macos-26
     timeout-minutes: 60
     steps:
       - name: Checkout
