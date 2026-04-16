@@ -17,14 +17,15 @@ class RunBenchmarkTests(unittest.TestCase):
 
         self.assertEqual(int(122.5 * 1024**2), value)
 
-    def test_sample_memory_bytes_falls_back_to_ps_rss(self) -> None:
+    def test_sample_memory_bytes_does_not_persist_ps_rss_fallback(self) -> None:
         with mock.patch("scripts.run_benchmark.jcmd_heap_bytes", return_value=None), mock.patch(
             "scripts.run_benchmark.process_tree_rss_bytes", return_value=987654321
-        ):
+        ), mock.patch("scripts.run_benchmark.log") as log_mock:
             value, source = run_benchmark.sample_memory_bytes(123, Path("/tmp/jcmd"))
 
-        self.assertEqual(987654321, value)
-        self.assertEqual("ps_rss", source)
+        self.assertIsNone(value)
+        self.assertEqual("jcmd_gc.heap_info_unavailable", source)
+        self.assertTrue(any("process-tree rss=987654321 bytes" in call.args[0] for call in log_mock.call_args_list))
 
     def test_build_sample_can_record_open_timeout(self) -> None:
         sample = run_benchmark.build_sample(

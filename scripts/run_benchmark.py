@@ -402,8 +402,8 @@ def sample_memory_bytes(root_pid: int, jcmd_executable: Path) -> tuple[int | Non
         return from_jcmd, "jcmd_gc.heap_info"
     from_rss = process_tree_rss_bytes(root_pid)
     if from_rss is not None:
-        return from_rss, "ps_rss"
-    return None, "unavailable"
+        log(f"jcmd heap probe unavailable; process-tree rss={from_rss} bytes (debug only, not persisted)")
+    return None, "jcmd_gc.heap_info_unavailable"
 
 
 def bob_platform(platform_name: str) -> str:
