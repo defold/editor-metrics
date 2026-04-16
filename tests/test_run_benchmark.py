@@ -7,6 +7,25 @@ from scripts import run_benchmark
 
 
 class RunBenchmarkTests(unittest.TestCase):
+    def test_parse_jcmd_heap_bytes_accepts_kibibytes(self) -> None:
+        value = run_benchmark.parse_jcmd_heap_bytes("garbage-first heap total 2129920K, used 531072K")
+
+        self.assertEqual(531072 * 1024, value)
+
+    def test_parse_jcmd_heap_bytes_accepts_mebibytes(self) -> None:
+        value = run_benchmark.parse_jcmd_heap_bytes("garbage-first heap total 2048M, used 122.5M")
+
+        self.assertEqual(int(122.5 * 1024**2), value)
+
+    def test_sample_memory_bytes_falls_back_to_ps_rss(self) -> None:
+        with mock.patch("scripts.run_benchmark.jcmd_heap_bytes", return_value=None), mock.patch(
+            "scripts.run_benchmark.process_tree_rss_bytes", return_value=987654321
+        ):
+            value, source = run_benchmark.sample_memory_bytes(123, Path("/tmp/jcmd"))
+
+        self.assertEqual(987654321, value)
+        self.assertEqual("ps_rss", source)
+
     def test_build_sample_can_record_open_timeout(self) -> None:
         sample = run_benchmark.build_sample(
             "defold/big-synthetic-project",
