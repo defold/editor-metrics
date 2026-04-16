@@ -51,6 +51,13 @@ jobs:
           java-version: '25'
           distribution: 'temurin'
 
+      - name: Verify Java tools
+        run: |
+          java -version
+          which java
+          which jcmd
+          jcmd -l || true
+
       - name: Show runner details
         run: uname -a
 
