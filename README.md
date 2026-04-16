@@ -7,7 +7,7 @@ Last updated: `2026-04-15T04:06:36Z`
 ## Run
 
 ```shell
-python scripts/ci.py --workflow Nightly --event workflow_dispatch --input editor_sha=${SHA} --input commit_to_default_branch=true
+python scripts/ci.py --workflow Nightly --event workflow_dispatch --input editor_sha=${SHA} --input comment="xcode upgrade" --input commit_to_default_branch=true
 ```
 
 ## Bob

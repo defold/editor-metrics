@@ -9,6 +9,10 @@ on:
         description: Optional Defold editor commit SHA or prefix
         required: false
         type: string
+      comment:
+        description: Optional note to store in metrics.csv and mark in charts
+        required: false
+        type: string
       commit_to_default_branch:
         description: Commit updated metrics back to the default branch
         required: false
@@ -28,7 +32,7 @@ concurrency:
 
 jobs:
   nightly:
-    runs-on: [self-hosted, macos-26]
+    runs-on: [self-hosted, macOS, ARM64, defold]
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -51,6 +55,7 @@ jobs:
           COMMIT_ENABLED: ${{ github.event_name == 'schedule' || inputs.commit_to_default_branch }}
           TARGET_BRANCH: ${{ inputs.target_branch || github.event.repository.default_branch }}
           EDITOR_SHA: ${{ inputs.editor_sha }}
+          COMMENT: ${{ inputs.comment || '' }}
         run: |
           mkdir -p artifacts work data charts
           python scripts/nightly.py \
@@ -61,7 +66,8 @@ jobs:
             --project defold/big-synthetic-project \
             --commit "$COMMIT_ENABLED" \
             --target-branch "$TARGET_BRANCH" \
-            ${EDITOR_SHA:+--editor-sha "$EDITOR_SHA"}
+            ${EDITOR_SHA:+--editor-sha "$EDITOR_SHA"} \
+            ${COMMENT:+--comment "$COMMENT"}
 
       - name: Upload nightly artifacts
         if: always()

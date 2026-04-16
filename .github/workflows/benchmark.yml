@@ -5,10 +5,15 @@ on:
     branches:
       - ci/**
   workflow_dispatch:
+    inputs:
+      comment:
+        description: Optional note to store in metrics.csv and mark in charts
+        required: false
+        type: string
 
 jobs:
   benchmark:
-    runs-on: [self-hosted, macos-26]
+    runs-on: [self-hosted, macOS, ARM64, defold]
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -26,6 +31,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PYTHONUNBUFFERED: '1'
+          COMMENT: ${{ inputs.comment || '' }}
         run: |
           mkdir -p artifacts work data charts
           python scripts/run_benchmark.py \
@@ -36,7 +42,8 @@ jobs:
           python scripts/persist_metrics.py \
             --sample artifacts/sample.json \
             --build-metadata artifacts/defold-build.json \
-            --csv data/metrics.csv
+            --csv data/metrics.csv \
+            ${COMMENT:+--comment "$COMMENT"}
           python scripts/generate_charts.py \
             --metrics-csv data/metrics.csv \
             --charts-dir charts
